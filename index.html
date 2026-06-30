@@ -1,0 +1,645 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Storage Test — TV</title>
+  <style>
+    :root {
+      --bg: #111;
+      --surface: #222;
+      --border: #444;
+      --focus: #f0b429;
+      --ok: #3ecf8e;
+      --fail: #e55353;
+      --muted: #888;
+      --text: #f0f0f0;
+      --radius: 10px;
+    }
+
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      background: var(--bg);
+      color: var(--text);
+      font-family: 'Segoe UI', Arial, sans-serif;
+      font-size: 28px;
+      padding: 40px 60px;
+      min-height: 100vh;
+    }
+
+    h1 { font-size: 2em; margin-bottom: 8px; }
+    .subtitle { color: var(--muted); font-size: 0.7em; margin-bottom: 40px; }
+
+    .grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 24px;
+    }
+
+    .card {
+      background: var(--surface);
+      border: 3px solid var(--border);
+      border-radius: var(--radius);
+      padding: 28px;
+      display: flex;
+      flex-direction: column;
+      gap: 14px;
+    }
+
+    .card-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+    }
+
+    .card-title { font-size: 1.1em; font-weight: bold; }
+
+    .badge {
+      font-size: 0.55em;
+      padding: 4px 14px;
+      border-radius: 20px;
+      font-weight: bold;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+    }
+    .badge-ok   { background: var(--ok);   color: #000; }
+    .badge-fail { background: var(--fail); color: #fff; }
+    .badge-unknown { background: var(--muted); color: #fff; }
+
+    .status-row {
+      font-size: 0.65em;
+      color: var(--muted);
+      line-height: 1.5;
+    }
+
+    .btn-row { display: flex; gap: 12px; flex-wrap: wrap; }
+
+    button {
+      background: #333;
+      color: var(--text);
+      border: 3px solid var(--border);
+      border-radius: 8px;
+      padding: 12px 22px;
+      font-size: 0.65em;
+      cursor: pointer;
+      transition: border-color 0.15s, background 0.15s;
+      outline: none;
+    }
+
+    button:focus, button:hover {
+      border-color: var(--focus);
+      background: #3a3a00;
+      color: var(--focus);
+    }
+
+    .result {
+      font-size: 0.6em;
+      color: var(--ok);
+      min-height: 1.6em;
+      word-break: break-all;
+    }
+    .result.error { color: var(--fail); }
+
+    .section-full {
+      grid-column: 1 / -1;
+      margin-top: 10px;
+    }
+
+    .log-box {
+      background: #0a0a0a;
+      border: 2px solid var(--border);
+      border-radius: var(--radius);
+      padding: 20px;
+      font-size: 0.55em;
+      font-family: monospace;
+      max-height: 220px;
+      overflow-y: auto;
+      color: #ccc;
+      line-height: 1.8;
+    }
+
+    .log-ok   { color: var(--ok); }
+    .log-fail { color: var(--fail); }
+    .log-info { color: #7ec8e3; }
+
+    .summary-bar {
+      display: flex;
+      gap: 24px;
+      flex-wrap: wrap;
+      font-size: 0.65em;
+      margin-bottom: 32px;
+      padding: 16px 20px;
+      background: var(--surface);
+      border-radius: var(--radius);
+      border: 2px solid var(--border);
+    }
+    .summary-item span { font-weight: bold; }
+    .summary-item .ok   { color: var(--ok); }
+    .summary-item .fail { color: var(--fail); }
+
+    .ua-bar {
+      font-size: 0.5em;
+      color: var(--muted);
+      margin-bottom: 20px;
+      word-break: break-all;
+      line-height: 1.6;
+    }
+  </style>
+</head>
+<body>
+
+<h1>Storage API Test</h1>
+<p class="subtitle">Samsung Smart TV / PWA compatibility probe &mdash; use your remote to navigate buttons</p>
+
+<div class="ua-bar" id="ua-display"></div>
+
+<div class="summary-bar" id="summary-bar">
+  Probing storage APIs&hellip;
+</div>
+
+<div class="grid" id="grid">
+
+  <!-- localStorage -->
+  <div class="card" id="card-ls">
+    <div class="card-header">
+      <span class="card-title">localStorage</span>
+      <span class="badge badge-unknown" id="badge-ls">?</span>
+    </div>
+    <div class="status-row" id="status-ls">Checking&hellip;</div>
+    <div class="btn-row">
+      <button onclick="lsWrite()">Write</button>
+      <button onclick="lsRead()">Read</button>
+      <button onclick="lsClear()">Clear</button>
+    </div>
+    <div class="result" id="result-ls"></div>
+  </div>
+
+  <!-- sessionStorage -->
+  <div class="card" id="card-ss">
+    <div class="card-header">
+      <span class="card-title">sessionStorage</span>
+      <span class="badge badge-unknown" id="badge-ss">?</span>
+    </div>
+    <div class="status-row" id="status-ss">Checking&hellip;</div>
+    <div class="btn-row">
+      <button onclick="ssWrite()">Write</button>
+      <button onclick="ssRead()">Read</button>
+      <button onclick="ssClear()">Clear</button>
+    </div>
+    <div class="result" id="result-ss"></div>
+  </div>
+
+  <!-- Cookies -->
+  <div class="card" id="card-ck">
+    <div class="card-header">
+      <span class="card-title">Cookies</span>
+      <span class="badge badge-unknown" id="badge-ck">?</span>
+    </div>
+    <div class="status-row" id="status-ck">Checking&hellip;</div>
+    <div class="btn-row">
+      <button onclick="ckWrite()">Write</button>
+      <button onclick="ckRead()">Read</button>
+      <button onclick="ckClear()">Clear</button>
+    </div>
+    <div class="result" id="result-ck"></div>
+  </div>
+
+  <!-- IndexedDB -->
+  <div class="card" id="card-idb">
+    <div class="card-header">
+      <span class="card-title">IndexedDB</span>
+      <span class="badge badge-unknown" id="badge-idb">?</span>
+    </div>
+    <div class="status-row" id="status-idb">Checking&hellip;</div>
+    <div class="btn-row">
+      <button onclick="idbWrite()">Write</button>
+      <button onclick="idbRead()">Read</button>
+      <button onclick="idbClear()">Clear</button>
+    </div>
+    <div class="result" id="result-idb"></div>
+  </div>
+
+  <!-- Cache API -->
+  <div class="card" id="card-cache">
+    <div class="card-header">
+      <span class="card-title">Cache API (Service Worker)</span>
+      <span class="badge badge-unknown" id="badge-cache">?</span>
+    </div>
+    <div class="status-row" id="status-cache">Checking&hellip;</div>
+    <div class="btn-row">
+      <button onclick="cacheWrite()">Write</button>
+      <button onclick="cacheRead()">Read</button>
+      <button onclick="cacheClear()">Clear</button>
+    </div>
+    <div class="result" id="result-cache"></div>
+  </div>
+
+  <!-- WebSQL (legacy) -->
+  <div class="card" id="card-wsql">
+    <div class="card-header">
+      <span class="card-title">WebSQL <small style="font-weight:normal;font-size:0.75em;">(legacy)</small></span>
+      <span class="badge badge-unknown" id="badge-wsql">?</span>
+    </div>
+    <div class="status-row" id="status-wsql">Checking&hellip;</div>
+    <div class="btn-row">
+      <button onclick="wsqlWrite()">Write</button>
+      <button onclick="wsqlRead()">Read</button>
+      <button onclick="wsqlClear()">Clear</button>
+    </div>
+    <div class="result" id="result-wsql"></div>
+  </div>
+
+  <!-- Service Worker registration -->
+  <div class="card section-full" id="card-sw">
+    <div class="card-header">
+      <span class="card-title">Service Worker</span>
+      <span class="badge badge-unknown" id="badge-sw">?</span>
+    </div>
+    <div class="status-row" id="status-sw">Checking&hellip;</div>
+    <div class="btn-row">
+      <button onclick="swRegister()">Register SW</button>
+      <button onclick="swUnregister()">Unregister</button>
+      <button onclick="swStatus()">Check Status</button>
+    </div>
+    <div class="result" id="result-sw"></div>
+  </div>
+
+  <!-- Event log -->
+  <div class="section-full">
+    <div class="card-title" style="margin-bottom:12px;font-size:0.75em;">Event Log</div>
+    <div class="log-box" id="log-box"></div>
+  </div>
+
+</div>
+
+<script>
+// ─── helpers ─────────────────────────────────────────────────────────────────
+const $ = id => document.getElementById(id);
+const TS = () => new Date().toLocaleTimeString();
+
+function log(msg, cls = '') {
+  const box = $('log-box');
+  const line = document.createElement('div');
+  if (cls) line.className = cls;
+  line.textContent = `[${TS()}] ${msg}`;
+  box.appendChild(line);
+  box.scrollTop = box.scrollHeight;
+}
+
+function setBadge(id, ok) {
+  const el = $('badge-' + id);
+  el.textContent = ok ? 'OK' : 'FAIL';
+  el.className = 'badge ' + (ok ? 'badge-ok' : 'badge-fail');
+}
+
+function setResult(id, msg, isError = false) {
+  const el = $('result-' + id);
+  el.textContent = msg;
+  el.className = 'result' + (isError ? ' error' : '');
+}
+
+const TEST_KEY = 'storage_test_key';
+const TEST_VAL = 'hello_tv_' + Date.now();
+
+// ─── localStorage ────────────────────────────────────────────────────────────
+function probe_ls() {
+  try {
+    localStorage.setItem('__probe__', '1');
+    localStorage.removeItem('__probe__');
+    $('status-ls').textContent = 'Available. Quota: ~5MB (typical). Persistent across sessions.';
+    setBadge('ls', true);
+    log('localStorage: available', 'log-ok');
+    return true;
+  } catch(e) {
+    $('status-ls').textContent = 'Unavailable: ' + e.message;
+    setBadge('ls', false);
+    log('localStorage: ' + e.message, 'log-fail');
+    return false;
+  }
+}
+function lsWrite() {
+  try {
+    localStorage.setItem(TEST_KEY, TEST_VAL);
+    setResult('ls', 'Written: ' + TEST_VAL);
+    log('localStorage write OK', 'log-ok');
+  } catch(e) { setResult('ls', e.message, true); log('localStorage write: ' + e, 'log-fail'); }
+}
+function lsRead() {
+  try {
+    const v = localStorage.getItem(TEST_KEY);
+    setResult('ls', v !== null ? 'Read: ' + v : '(no value stored)');
+    log('localStorage read: ' + v, 'log-ok');
+  } catch(e) { setResult('ls', e.message, true); }
+}
+function lsClear() {
+  try { localStorage.removeItem(TEST_KEY); setResult('ls', 'Cleared.'); log('localStorage cleared'); } catch(e) { setResult('ls', e.message, true); }
+}
+
+// ─── sessionStorage ───────────────────────────────────────────────────────────
+function probe_ss() {
+  try {
+    sessionStorage.setItem('__probe__', '1');
+    sessionStorage.removeItem('__probe__');
+    $('status-ss').textContent = 'Available. Clears when browser/app is closed.';
+    setBadge('ss', true);
+    log('sessionStorage: available', 'log-ok');
+    return true;
+  } catch(e) {
+    $('status-ss').textContent = 'Unavailable: ' + e.message;
+    setBadge('ss', false);
+    log('sessionStorage: ' + e.message, 'log-fail');
+    return false;
+  }
+}
+function ssWrite() {
+  try { sessionStorage.setItem(TEST_KEY, TEST_VAL); setResult('ss', 'Written: ' + TEST_VAL); log('sessionStorage write OK', 'log-ok'); }
+  catch(e) { setResult('ss', e.message, true); log('sessionStorage write: ' + e, 'log-fail'); }
+}
+function ssRead() {
+  try {
+    const v = sessionStorage.getItem(TEST_KEY);
+    setResult('ss', v !== null ? 'Read: ' + v : '(no value)');
+    log('sessionStorage read: ' + v, 'log-ok');
+  } catch(e) { setResult('ss', e.message, true); }
+}
+function ssClear() {
+  try { sessionStorage.removeItem(TEST_KEY); setResult('ss', 'Cleared.'); } catch(e) { setResult('ss', e.message, true); }
+}
+
+// ─── Cookies ──────────────────────────────────────────────────────────────────
+function probe_ck() {
+  try {
+    document.cookie = '__probe__=1; path=/';
+    const ok = document.cookie.includes('__probe__');
+    document.cookie = '__probe__=; expires=Thu, 01 Jan 1970 00:00:00 GMT; path=/';
+    if (!ok) throw new Error('Cookie write did not persist');
+    $('status-ck').textContent = 'Available. Max ~4KB per cookie. May be restricted on file:// protocol.';
+    setBadge('ck', true);
+    log('Cookies: available', 'log-ok');
+    return true;
+  } catch(e) {
+    $('status-ck').textContent = 'Unavailable: ' + e.message;
+    setBadge('ck', false);
+    log('Cookies: ' + e.message, 'log-fail');
+    return false;
+  }
+}
+function ckWrite() {
+  try {
+    const expires = new Date(Date.now() + 86400000).toUTCString();
+    document.cookie = TEST_KEY + '=' + TEST_VAL + '; path=/; expires=' + expires;
+    setResult('ck', 'Written: ' + TEST_VAL);
+    log('Cookie write OK', 'log-ok');
+  } catch(e) { setResult('ck', e.message, true); log('Cookie write: ' + e, 'log-fail'); }
+}
+function ckRead() {
+  const m = document.cookie.match(new RegExp('(?:^|; )' + TEST_KEY + '=([^;]*)'));
+  const v = m ? decodeURIComponent(m[1]) : null;
+  setResult('ck', v ? 'Read: ' + v : '(no cookie found)');
+  log('Cookie read: ' + v, v ? 'log-ok' : 'log-info');
+}
+function ckClear() {
+  document.cookie = TEST_KEY + '=; expires=Thu, 01 Jan 1970 00:00:00 GMT; path=/';
+  setResult('ck', 'Cleared.');
+}
+
+// ─── IndexedDB ────────────────────────────────────────────────────────────────
+let idbDb = null;
+function probe_idb() {
+  if (!window.indexedDB) {
+    $('status-idb').textContent = 'window.indexedDB not found.';
+    setBadge('idb', false);
+    log('IndexedDB: not found', 'log-fail');
+    return;
+  }
+  const req = indexedDB.open('storage_test', 1);
+  req.onupgradeneeded = e => {
+    e.target.result.createObjectStore('kv', { keyPath: 'k' });
+  };
+  req.onsuccess = e => {
+    idbDb = e.target.result;
+    $('status-idb').textContent = 'Available. Async, large quota (usually >50MB). Persistent.';
+    setBadge('idb', true);
+    log('IndexedDB: open OK', 'log-ok');
+  };
+  req.onerror = e => {
+    $('status-idb').textContent = 'Error: ' + e.target.error;
+    setBadge('idb', false);
+    log('IndexedDB: ' + e.target.error, 'log-fail');
+  };
+}
+function idbWrite() {
+  if (!idbDb) { setResult('idb', 'DB not ready', true); return; }
+  const tx = idbDb.transaction('kv', 'readwrite');
+  tx.objectStore('kv').put({ k: TEST_KEY, v: TEST_VAL });
+  tx.oncomplete = () => { setResult('idb', 'Written: ' + TEST_VAL); log('IDB write OK', 'log-ok'); };
+  tx.onerror = e => { setResult('idb', e.target.error, true); log('IDB write: ' + e.target.error, 'log-fail'); };
+}
+function idbRead() {
+  if (!idbDb) { setResult('idb', 'DB not ready', true); return; }
+  const req = idbDb.transaction('kv').objectStore('kv').get(TEST_KEY);
+  req.onsuccess = e => {
+    const v = e.target.result ? e.target.result.v : null;
+    setResult('idb', v ? 'Read: ' + v : '(no value)');
+    log('IDB read: ' + v, 'log-ok');
+  };
+}
+function idbClear() {
+  if (!idbDb) { setResult('idb', 'DB not ready', true); return; }
+  const tx = idbDb.transaction('kv', 'readwrite');
+  tx.objectStore('kv').delete(TEST_KEY);
+  tx.oncomplete = () => { setResult('idb', 'Cleared.'); };
+}
+
+// ─── Cache API ────────────────────────────────────────────────────────────────
+const CACHE_NAME = 'storage-test-v1';
+const CACHE_URL  = '/storage-test-entry';
+function probe_cache() {
+  if (!('caches' in window)) {
+    $('status-cache').textContent = 'window.caches not found. Requires HTTPS or localhost + Service Worker support.';
+    setBadge('cache', false);
+    log('Cache API: not found', 'log-fail');
+    return;
+  }
+  $('status-cache').textContent = 'Available. Stores Request/Response pairs. Requires HTTPS for SW.';
+  setBadge('cache', true);
+  log('Cache API: available', 'log-ok');
+}
+async function cacheWrite() {
+  if (!('caches' in window)) { setResult('cache', 'Not available', true); return; }
+  try {
+    const c = await caches.open(CACHE_NAME);
+    await c.put(CACHE_URL, new Response(TEST_VAL, { headers: { 'Content-Type': 'text/plain' } }));
+    setResult('cache', 'Written: ' + TEST_VAL);
+    log('Cache write OK', 'log-ok');
+  } catch(e) { setResult('cache', e.message, true); log('Cache write: ' + e, 'log-fail'); }
+}
+async function cacheRead() {
+  if (!('caches' in window)) { setResult('cache', 'Not available', true); return; }
+  try {
+    const c = await caches.open(CACHE_NAME);
+    const r = await c.match(CACHE_URL);
+    if (r) {
+      const t = await r.text();
+      setResult('cache', 'Read: ' + t);
+      log('Cache read: ' + t, 'log-ok');
+    } else {
+      setResult('cache', '(no cached entry)');
+    }
+  } catch(e) { setResult('cache', e.message, true); }
+}
+async function cacheClear() {
+  if (!('caches' in window)) { setResult('cache', 'Not available', true); return; }
+  try {
+    await caches.delete(CACHE_NAME);
+    setResult('cache', 'Cache deleted.');
+    log('Cache cleared', 'log-info');
+  } catch(e) { setResult('cache', e.message, true); }
+}
+
+// ─── WebSQL (deprecated but may exist on old WebKit) ─────────────────────────
+let wsqlDb = null;
+function probe_wsql() {
+  if (!window.openDatabase) {
+    $('status-wsql').textContent = 'Not available (removed from modern browsers, may exist on old WebKit/Tizen).';
+    setBadge('wsql', false);
+    log('WebSQL: not found', 'log-fail');
+    return;
+  }
+  try {
+    wsqlDb = openDatabase('storage_test', '1.0', 'Test DB', 2 * 1024 * 1024);
+    wsqlDb.transaction(tx => {
+      tx.executeSql('CREATE TABLE IF NOT EXISTS kv (k TEXT PRIMARY KEY, v TEXT)');
+    });
+    $('status-wsql').textContent = 'Available (deprecated but functional on this browser). ~5MB default.';
+    setBadge('wsql', true);
+    log('WebSQL: available', 'log-ok');
+  } catch(e) {
+    $('status-wsql').textContent = 'Error: ' + e.message;
+    setBadge('wsql', false);
+    log('WebSQL: ' + e.message, 'log-fail');
+  }
+}
+function wsqlWrite() {
+  if (!wsqlDb) { setResult('wsql', 'Not available', true); return; }
+  wsqlDb.transaction(tx => {
+    tx.executeSql('INSERT OR REPLACE INTO kv (k, v) VALUES (?, ?)', [TEST_KEY, TEST_VAL],
+      () => { setResult('wsql', 'Written: ' + TEST_VAL); log('WebSQL write OK', 'log-ok'); },
+      (_, e) => { setResult('wsql', e.message, true); log('WebSQL write: ' + e.message, 'log-fail'); });
+  });
+}
+function wsqlRead() {
+  if (!wsqlDb) { setResult('wsql', 'Not available', true); return; }
+  wsqlDb.readTransaction(tx => {
+    tx.executeSql('SELECT v FROM kv WHERE k = ?', [TEST_KEY],
+      (_, r) => {
+        const v = r.rows.length ? r.rows.item(0).v : null;
+        setResult('wsql', v ? 'Read: ' + v : '(no value)');
+        log('WebSQL read: ' + v, 'log-ok');
+      },
+      (_, e) => { setResult('wsql', e.message, true); });
+  });
+}
+function wsqlClear() {
+  if (!wsqlDb) { setResult('wsql', 'Not available', true); return; }
+  wsqlDb.transaction(tx => {
+    tx.executeSql('DELETE FROM kv WHERE k = ?', [TEST_KEY],
+      () => setResult('wsql', 'Cleared.'),
+      (_, e) => setResult('wsql', e.message, true));
+  });
+}
+
+// ─── Service Worker ───────────────────────────────────────────────────────────
+function probe_sw() {
+  if (!('serviceWorker' in navigator)) {
+    $('status-sw').textContent = 'navigator.serviceWorker not found. Required for full PWA offline support.';
+    setBadge('sw', false);
+    log('Service Worker: not found', 'log-fail');
+    return;
+  }
+  $('status-sw').textContent = 'API present. Registration requires HTTPS (or localhost). Enables offline caching.';
+  setBadge('sw', true);
+  log('Service Worker API: available', 'log-ok');
+}
+async function swRegister() {
+  if (!('serviceWorker' in navigator)) { setResult('sw', 'Not supported', true); return; }
+  try {
+    // Inline SW as a blob — works on localhost/file for testing
+    const swCode = `
+self.addEventListener('install', e => { self.skipWaiting(); });
+self.addEventListener('activate', e => { e.waitUntil(self.clients.claim()); });
+self.addEventListener('fetch', e => { /* passthrough */ });
+`;
+    const blob = new Blob([swCode], { type: 'application/javascript' });
+    const url  = URL.createObjectURL(blob);
+    const reg  = await navigator.serviceWorker.register(url, { scope: './' });
+    setResult('sw', 'Registered! Scope: ' + reg.scope);
+    log('SW registered, scope: ' + reg.scope, 'log-ok');
+  } catch(e) {
+    setResult('sw', 'Registration failed: ' + e.message, true);
+    log('SW register: ' + e.message, 'log-fail');
+  }
+}
+async function swUnregister() {
+  if (!('serviceWorker' in navigator)) { setResult('sw', 'Not supported', true); return; }
+  const regs = await navigator.serviceWorker.getRegistrations();
+  for (const r of regs) await r.unregister();
+  setResult('sw', 'Unregistered (' + regs.length + ' worker(s)).');
+  log('SW unregistered', 'log-info');
+}
+async function swStatus() {
+  if (!('serviceWorker' in navigator)) { setResult('sw', 'Not supported', true); return; }
+  const regs = await navigator.serviceWorker.getRegistrations();
+  if (!regs.length) { setResult('sw', 'No registered service workers.'); return; }
+  const states = regs.map(r => r.active ? 'active:' + r.scope : 'pending');
+  setResult('sw', states.join(' | '));
+  log('SW status: ' + states.join(', '), 'log-ok');
+}
+
+// ─── Run all probes on load ───────────────────────────────────────────────────
+window.addEventListener('DOMContentLoaded', () => {
+  $('ua-display').textContent = 'User-Agent: ' + navigator.userAgent;
+
+  const results = {
+    ls:    probe_ls(),
+    ss:    probe_ss(),
+    ck:    probe_ck(),
+  };
+  probe_idb();
+  probe_cache();
+  probe_wsql();
+  probe_sw();
+
+  // Summary after a tick so async probes can settle
+  setTimeout(() => {
+    const badges = ['ls','ss','ck','idb','cache','wsql','sw'];
+    const passed = badges.filter(id => $('badge-' + id).classList.contains('badge-ok'));
+    const failed = badges.filter(id => $('badge-' + id).classList.contains('badge-fail'));
+    $('summary-bar').innerHTML =
+      `<div class="summary-item">Available: <span class="ok">${passed.join(', ') || 'none'}</span></div>` +
+      `<div class="summary-item">Unavailable: <span class="fail">${failed.join(', ') || 'none'}</span></div>`;
+    log('Probe complete. Available: ' + passed.join(', '), 'log-info');
+  }, 800);
+});
+
+// ─── Remote-control keyboard navigation ──────────────────────────────────────
+document.addEventListener('keydown', e => {
+  const focusable = Array.from(document.querySelectorAll('button'));
+  const idx = focusable.indexOf(document.activeElement);
+  if (e.key === 'ArrowRight' || e.key === 'ArrowDown') {
+    e.preventDefault();
+    const next = focusable[(idx + 1) % focusable.length];
+    next && next.focus();
+  } else if (e.key === 'ArrowLeft' || e.key === 'ArrowUp') {
+    e.preventDefault();
+    const prev = focusable[(idx - 1 + focusable.length) % focusable.length];
+    prev && prev.focus();
+  } else if (e.key === 'Enter' && document.activeElement.tagName === 'BUTTON') {
+    document.activeElement.click();
+  }
+});
+</script>
+</body>
+</html>
