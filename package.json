@@ -1,0 +1,11 @@
+{
+  "name": "cirkel-train",
+  "version": "1.0.0",
+  "private": true,
+  "scripts": {
+    "build": "bun run build.js"
+  },
+  "devDependencies": {
+    "html-minifier-terser": "^7.2.0"
+  }
+}

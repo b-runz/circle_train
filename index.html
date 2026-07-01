@@ -146,12 +146,35 @@
       word-break: break-all;
       line-height: 1.6;
     }
+
+    .player-link { margin-bottom: 24px; }
+
+    .player-btn {
+      background: #1a3a1a;
+      color: var(--ok);
+      border: 3px solid var(--ok);
+      border-radius: 8px;
+      padding: 14px 32px;
+      font-size: 0.7em;
+      cursor: pointer;
+      outline: none;
+      transition: border-color 0.15s, background 0.15s, color 0.15s;
+    }
+    .player-btn:focus, .player-btn:hover {
+      border-color: var(--focus);
+      background: rgba(240,180,41,0.1);
+      color: var(--focus);
+    }
   </style>
 </head>
 <body>
 
 <h1>Storage API Test</h1>
 <p class="subtitle">Samsung Smart TV / PWA compatibility probe &mdash; use your remote to navigate buttons</p>
+
+<div class="player-link">
+  <button class="player-btn" onclick="location.href='player.html'">&#9654; Open Offline Video Player</button>
+</div>
 
 <div class="ua-bar" id="ua-display"></div>
 

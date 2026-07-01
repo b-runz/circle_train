@@ -1,0 +1,539 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Udstraek — Offline Player</title>
+  <link rel="manifest" href="/manifest.json" />
+  <style>
+    :root {
+      --bg:      #111;
+      --surface: #222;
+      --border:  #444;
+      --focus:   #f0b429;
+      --ok:      #3ecf8e;
+      --fail:    #e55353;
+      --muted:   #888;
+      --text:    #f0f0f0;
+    }
+
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+
+    html, body {
+      height: 100%;
+      background: #000;
+      color: var(--text);
+      font-family: 'Segoe UI', Arial, sans-serif;
+      font-size: 24px;
+      overflow: hidden;
+    }
+
+    body { display: flex; flex-direction: column; }
+
+    /* ─── Top bar ─────────────────────────────────────────────────────────── */
+    .top-bar {
+      background: var(--surface);
+      padding: 0 40px;
+      height: 70px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      border-bottom: 2px solid var(--border);
+      flex-shrink: 0;
+    }
+    .top-bar h1 { font-size: 0.9em; font-weight: bold; }
+
+    .pills { display: flex; gap: 12px; }
+    .pill {
+      font-size: 0.5em;
+      padding: 5px 16px;
+      border-radius: 20px;
+      font-weight: bold;
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+    }
+    .pill-ok      { background: var(--ok);    color: #000; }
+    .pill-fail    { background: var(--fail);  color: #fff; }
+    .pill-info    { background: #3a9bd5;      color: #fff; }
+    .pill-neutral { background: var(--muted); color: #fff; }
+
+    /* ─── Video area ──────────────────────────────────────────────────────── */
+    .video-wrap {
+      flex: 1;
+      position: relative;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      background: #000;
+      overflow: hidden;
+    }
+
+    video {
+      width: 100%;
+      height: 100%;
+      object-fit: contain;
+      display: block;
+    }
+
+    /* Big play button */
+    .big-play {
+      position: absolute;
+      top: 50%; left: 50%;
+      transform: translate(-50%, -50%);
+      width: 120px; height: 120px;
+      border-radius: 50%;
+      background: rgba(0,0,0,0.6);
+      border: 4px solid var(--focus);
+      color: var(--focus);
+      font-size: 40px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      cursor: pointer;
+      outline: none;
+      transition: background 0.2s, transform 0.1s;
+    }
+    .big-play:focus  { background: rgba(240,180,41,0.2); transform: translate(-50%,-50%) scale(1.08); }
+    .big-play.hidden { display: none; }
+
+    /* Controls overlay */
+    .overlay {
+      position: absolute;
+      bottom: 0; left: 0; right: 0;
+      background: linear-gradient(transparent, rgba(0,0,0,0.88));
+      padding: 32px 40px 24px;
+      transition: opacity 0.3s;
+    }
+    .overlay.hidden { opacity: 0; pointer-events: none; }
+
+    .progress {
+      width: 100%;
+      height: 6px;
+      background: rgba(255,255,255,0.25);
+      border-radius: 3px;
+      margin-bottom: 16px;
+      cursor: pointer;
+    }
+    .progress-fill {
+      height: 100%;
+      background: var(--focus);
+      border-radius: 3px;
+      width: 0%;
+      transition: width 0.25s linear;
+      pointer-events: none;
+    }
+
+    .ctrl-row { display: flex; align-items: center; gap: 16px; }
+
+    .ctrl-btn {
+      background: transparent;
+      border: 2px solid transparent;
+      border-radius: 8px;
+      color: var(--text);
+      font-size: 0.65em;
+      padding: 8px 18px;
+      cursor: pointer;
+      outline: none;
+    }
+    .ctrl-btn:focus, .ctrl-btn:hover {
+      border-color: var(--focus);
+      background: rgba(240,180,41,0.12);
+      color: var(--focus);
+    }
+
+    .time-display { font-size: 0.55em; color: #ccc; margin-left: auto; }
+
+    /* ─── Status / lock overlay ───────────────────────────────────────────── */
+    #status-screen {
+      position: absolute;
+      inset: 0;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: 24px;
+      background: rgba(0,0,0,0.82);
+    }
+    #status-screen.hidden { display: none; }
+
+    .status-icon { font-size: 3em; }
+
+    .status-msg {
+      font-size: 0.75em;
+      color: #ccc;
+      text-align: center;
+      max-width: 700px;
+      line-height: 1.6;
+    }
+    .status-msg.error { color: var(--fail); }
+
+    .status-sub {
+      font-size: 0.55em;
+      color: var(--muted);
+      text-align: center;
+    }
+
+    /* ─── Bottom bar ──────────────────────────────────────────────────────── */
+    .bottom-bar {
+      background: var(--surface);
+      padding: 0 40px;
+      height: 68px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      border-top: 2px solid var(--border);
+      flex-shrink: 0;
+      font-size: 0.55em;
+    }
+
+    .nav-btn {
+      background: #333;
+      color: var(--text);
+      border: 3px solid var(--border);
+      border-radius: 8px;
+      padding: 10px 22px;
+      font-size: 1em;
+      cursor: pointer;
+      outline: none;
+    }
+    .nav-btn:focus, .nav-btn:hover {
+      border-color: var(--focus);
+      background: rgba(240,180,41,0.08);
+      color: var(--focus);
+    }
+
+    .hint-text { font-size: 1em; color: var(--muted); }
+  </style>
+</head>
+<body>
+
+<!-- Top bar -->
+<div class="top-bar">
+  <h1>Udstraek &mdash; Offline Player</h1>
+  <div class="pills">
+    <span class="pill pill-neutral" id="net-pill">Checking&hellip;</span>
+    <span class="pill pill-neutral" id="cache-pill">Checking&hellip;</span>
+  </div>
+</div>
+
+<!-- Video -->
+<div class="video-wrap" id="video-wrap">
+  <video id="vid" preload="metadata" playsinline></video>
+
+  <button class="big-play" id="big-play" tabindex="1">&#9654;</button>
+
+  <div class="overlay hidden" id="overlay">
+    <div class="progress" id="progress">
+      <div class="progress-fill" id="progress-fill"></div>
+    </div>
+    <div class="ctrl-row">
+      <button class="ctrl-btn" id="btn-play" tabindex="2" onclick="togglePlay()">&#9654; Play</button>
+      <button class="ctrl-btn" tabindex="3" onclick="seek(-10)">&#8592; 10s</button>
+      <button class="ctrl-btn" tabindex="4" onclick="seek(10)">10s &#8594;</button>
+      <span class="time-display" id="time-display">0:00 / 0:00</span>
+    </div>
+  </div>
+
+  <!-- Status / lock screen -->
+  <div id="status-screen">
+    <div class="status-icon" id="status-icon">&#128274;</div>
+    <div class="status-msg"  id="status-msg">Loading&hellip;</div>
+    <div class="status-sub"  id="status-sub"></div>
+  </div>
+</div>
+
+<!-- Bottom bar -->
+<div class="bottom-bar">
+  <button class="nav-btn" tabindex="10" onclick="location.href='index.html'">&#8592; Storage Test</button>
+  <span class="hint-text">OK=Play/Pause &nbsp;&#8592;&#8594;=&plusmn;10s &nbsp;&#8593;&#8595;=Volume</span>
+</div>
+
+<script>
+// ─── Elements ─────────────────────────────────────────────────────────────────
+const vid        = document.getElementById('vid');
+const bigPlay    = document.getElementById('big-play');
+const overlay    = document.getElementById('overlay');
+const progFill   = document.getElementById('progress-fill');
+const timeEl     = document.getElementById('time-display');
+const netPill    = document.getElementById('net-pill');
+const cachePill  = document.getElementById('cache-pill');
+const statusScr  = document.getElementById('status-screen');
+const statusIcon = document.getElementById('status-icon');
+const statusMsg  = document.getElementById('status-msg');
+const statusSub  = document.getElementById('status-sub');
+const btnPlay    = document.getElementById('btn-play');
+
+const CACHE_NAME    = 'cirkel-train-v1';
+const SALT_LEN      = 16;
+const IV_LEN        = 16;         // AES-CTR uses 16-byte counter block
+const HEADER_LEN    = SALT_LEN + IV_LEN;
+const DECRYPT_CHUNK = 64 * 1024;  // 64 KB streaming window
+
+let hideTimer = null;
+
+// ─── Status screen helpers ────────────────────────────────────────────────────
+function showStatus(icon, msg, sub = '') {
+  statusIcon.textContent = icon;
+  statusMsg.textContent  = msg;
+  statusMsg.className    = 'status-msg';
+  statusSub.textContent  = sub;
+  statusScr.classList.remove('hidden');
+  bigPlay.classList.add('hidden');
+  overlay.classList.add('hidden');
+}
+
+function showError(msg, sub = '') {
+  statusIcon.textContent = '⚠';
+  statusMsg.textContent  = msg;
+  statusMsg.className    = 'status-msg error';
+  statusSub.textContent  = sub;
+  statusScr.classList.remove('hidden');
+}
+
+function hideStatus() {
+  statusScr.classList.add('hidden');
+  bigPlay.classList.remove('hidden');
+  showOverlay();
+}
+
+// ─── Network status ───────────────────────────────────────────────────────────
+function updateNet() {
+  netPill.textContent = navigator.onLine ? 'Online' : 'Offline';
+  netPill.className   = 'pill ' + (navigator.onLine ? 'pill-ok' : 'pill-fail');
+}
+window.addEventListener('online',  updateNet);
+window.addEventListener('offline', updateNet);
+updateNet();
+
+// ─── Service Worker ───────────────────────────────────────────────────────────
+async function initSW() {
+  if (!('serviceWorker' in navigator)) return;
+  try {
+    await navigator.serviceWorker.register('/sw.js', { scope: '/' });
+  } catch (e) {
+    console.warn('SW registration failed:', e);
+  }
+}
+
+// ─── Streaming decryption (AES-256-CTR, 64 KB chunks, ~192 KB peak RAM) ──────
+async function streamDecryptToCache(passphrase, encResp) {
+  const cl       = encResp.headers.get('Content-Length');
+  const plainLen = cl ? parseInt(cl) - HEADER_LEN : null;
+
+  const reader = encResp.body.getReader();
+  const { readable, writable } = new TransformStream();
+  const writer = writable.getWriter();
+
+  // Start cache write immediately — it will consume `readable` as we push to `writable`
+  const cachePromise = caches.open(CACHE_NAME).then(cache =>
+    cache.put('/udstraek.mp4', new Response(readable, {
+      status: 200,
+      headers: Object.assign(
+        { 'Content-Type': 'video/mp4', 'Accept-Ranges': 'bytes' },
+        plainLen !== null ? { 'Content-Length': String(plainLen) } : {}
+      ),
+    }))
+  );
+
+  let pending = [], pendingBytes = 0, iv = null, key = null, offset = 0;
+
+  function take(n) {
+    const out = new Uint8Array(n);
+    let pos = 0;
+    while (pos < n) {
+      const c = pending[0], need = n - pos;
+      if (c.length <= need) {
+        out.set(c, pos); pos += c.length; pendingBytes -= c.length; pending.shift();
+      } else {
+        out.set(c.subarray(0, need), pos); pending[0] = c.subarray(need); pendingBytes -= need; pos = n;
+      }
+    }
+    return out;
+  }
+
+  function ctrAt(blockIdx) {
+    // Copy iv and add blockIdx as a 128-bit big-endian increment
+    const c = new Uint8Array(iv);
+    let carry = blockIdx;
+    for (let i = 15; i >= 0 && carry > 0; i--) { carry += c[i]; c[i] = carry & 0xff; carry >>>= 8; }
+    return c;
+  }
+
+  try {
+    for (let done = false; !done;) {
+      const { done: d, value } = await reader.read();
+      done = d;
+      if (value) { pending.push(value); pendingBytes += value.length; }
+
+      if (!key && pendingBytes >= HEADER_LEN) {
+        const hdr = take(HEADER_LEN);
+        iv = hdr.subarray(SALT_LEN);
+        const km = await crypto.subtle.importKey('raw', new TextEncoder().encode(passphrase), 'PBKDF2', false, ['deriveKey']);
+        key = await crypto.subtle.deriveKey(
+          { name: 'PBKDF2', salt: hdr.subarray(0, SALT_LEN), iterations: 100000, hash: 'SHA-256' },
+          km, { name: 'AES-CTR', length: 256 }, false, ['decrypt']
+        );
+      }
+
+      while (key && pendingBytes >= (done ? 1 : DECRYPT_CHUNK)) {
+        const n = done ? pendingBytes : DECRYPT_CHUNK;
+        // offset is always a multiple of 16 (DECRYPT_CHUNK = 65536 = 4096 × 16)
+        const plain = await crypto.subtle.decrypt(
+          { name: 'AES-CTR', counter: ctrAt(offset >>> 4), length: 128 },
+          key, take(n)
+        );
+        await writer.write(new Uint8Array(plain));
+        offset += n;
+      }
+    }
+    await writer.close();
+  } catch (e) {
+    writer.abort(e).catch(() => {});
+    throw e;
+  }
+  await cachePromise;
+}
+
+// ─── Main init ────────────────────────────────────────────────────────────────
+async function init() {
+  await initSW();
+
+  const passphrase = new URLSearchParams(location.search).get('decrypt');
+
+  // 1. Check if decrypted MP4 is already in Cache Storage
+  if ('caches' in window) {
+    try {
+      const cache = await caches.open(CACHE_NAME);
+      const hit   = await cache.match('/udstraek.mp4');
+      if (hit) {
+        cachePill.textContent = 'Cached ✓';
+        cachePill.className   = 'pill pill-info';
+        // Wait for SW to be active so it can intercept the video request
+        if ('serviceWorker' in navigator) await navigator.serviceWorker.ready;
+        vid.src = 'udstraek.mp4';
+        hideStatus();
+        return;
+      }
+    } catch (e) { /* Cache API unavailable */ }
+  }
+
+  cachePill.textContent = 'Not cached';
+  cachePill.className   = 'pill pill-neutral';
+
+  // 2. No cache — need decrypt key
+  if (!passphrase) {
+    showStatus('🔒', 'Video is encrypted', 'Add  ?decrypt=<passphrase>  to the URL to unlock and cache for offline.');
+    return;
+  }
+
+  // 3–5. Stream-fetch → AES-CTR decrypt → Cache Storage, one 64 KB window at a time
+  showStatus('⬇', 'Fetching & decrypting…', '(streaming)');
+  try {
+    const resp = await fetch('udstraek.enc');
+    if (!resp.ok) throw new Error('HTTP ' + resp.status);
+    await streamDecryptToCache(passphrase, resp);
+  } catch (e) {
+    showError('Decryption failed — wrong passphrase?', e.message);
+    return;
+  }
+  cachePill.textContent = 'Cached ✓';
+  cachePill.className   = 'pill pill-info';
+
+  // 6. Play from Cache Storage via SW — no data stays in page RAM
+  showStatus('⏳', 'Starting player…');
+  if ('serviceWorker' in navigator) await navigator.serviceWorker.ready;
+  vid.src = 'udstraek.mp4';
+  hideStatus();
+}
+
+// ─── Video controls ───────────────────────────────────────────────────────────
+function togglePlay() { vid.paused ? vid.play() : vid.pause(); }
+
+function seek(s) {
+  if (!vid.duration) return;
+  vid.currentTime = Math.max(0, Math.min(vid.duration, vid.currentTime + s));
+  showOverlay();
+}
+
+function fmt(s) {
+  if (!s || isNaN(s)) return '0:00';
+  return Math.floor(s / 60) + ':' + String(Math.floor(s % 60)).padStart(2, '0');
+}
+
+vid.addEventListener('timeupdate', () => {
+  if (vid.duration) progFill.style.width = (vid.currentTime / vid.duration * 100) + '%';
+  timeEl.textContent = fmt(vid.currentTime) + ' / ' + fmt(vid.duration);
+});
+
+vid.addEventListener('play',  () => { btnPlay.innerHTML = '⏸ Pause'; bigPlay.classList.add('hidden'); showOverlay(); });
+vid.addEventListener('pause', () => { btnPlay.innerHTML = '▶ Play'; bigPlay.classList.remove('hidden'); showOverlay(); });
+vid.addEventListener('ended', () => { btnPlay.innerHTML = '▶ Play'; bigPlay.classList.remove('hidden'); });
+
+bigPlay.addEventListener('click', togglePlay);
+
+document.getElementById('progress').addEventListener('click', function(e) {
+  if (!vid.duration) return;
+  const r = this.getBoundingClientRect();
+  vid.currentTime = (e.clientX - r.left) / r.width * vid.duration;
+});
+
+// ─── Controls auto-hide ───────────────────────────────────────────────────────
+function showOverlay() {
+  overlay.classList.remove('hidden');
+  clearTimeout(hideTimer);
+  if (!vid.paused) {
+    hideTimer = setTimeout(() => overlay.classList.add('hidden'), 3000);
+  }
+}
+
+document.getElementById('video-wrap').addEventListener('mousemove', showOverlay);
+
+// ─── Keyboard / TV remote ─────────────────────────────────────────────────────
+const TIZEN = { 415: 'play', 19: 'pause', 417: 'ff', 412: 'rew', 10009: 'back' };
+
+document.addEventListener('keydown', e => {
+  const tk      = TIZEN[e.keyCode];
+  const focused = document.activeElement;
+  const isBtn   = focused && focused.tagName === 'BUTTON';
+
+  if (tk === 'play' || tk === 'pause') { e.preventDefault(); togglePlay(); showOverlay(); return; }
+  if (tk === 'ff')   { e.preventDefault(); seek(30); return; }
+  if (tk === 'rew')  { e.preventDefault(); seek(-30); return; }
+  if (tk === 'back') { e.preventDefault(); history.back(); return; }
+
+  switch (e.key) {
+    case 'Enter': if (!isBtn) { e.preventDefault(); togglePlay(); showOverlay(); } break;
+    case ' ':     e.preventDefault(); togglePlay(); showOverlay(); break;
+    case 'ArrowLeft':
+      if (isBtn) moveFocus(-1); else { e.preventDefault(); seek(-10); } break;
+    case 'ArrowRight':
+      if (isBtn) moveFocus(1); else { e.preventDefault(); seek(10); } break;
+    case 'ArrowUp':
+      e.preventDefault();
+      if (isBtn) bigPlay.focus();
+      else { vid.volume = Math.min(1, vid.volume + 0.1); showOverlay(); }
+      break;
+    case 'ArrowDown':
+      e.preventDefault();
+      if (isBtn) moveFocus(1);
+      else document.querySelector('button[tabindex="10"]').focus();
+      break;
+    case 'Escape': history.back(); break;
+  }
+});
+
+function moveFocus(dir) {
+  const all = [...document.querySelectorAll('button[tabindex]')].sort((a, b) => a.tabIndex - b.tabIndex);
+  const idx = all.indexOf(document.activeElement);
+  const next = all[(idx + dir + all.length) % all.length];
+  if (next) next.focus();
+}
+
+// ─── Boot ─────────────────────────────────────────────────────────────────────
+window.addEventListener('DOMContentLoaded', () => {
+  showStatus('⏳', 'Loading…');
+  init().catch(e => showError('Unexpected error', e.message));
+});
+</script>
+</body>
+</html>

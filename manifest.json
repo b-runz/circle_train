@@ -1,0 +1,10 @@
+{
+  "name": "Cirkel Train — Offline Player",
+  "short_name": "CirkelTrain",
+  "start_url": "/player.html",
+  "display": "fullscreen",
+  "background_color": "#111111",
+  "theme_color": "#111111",
+  "orientation": "landscape",
+  "scope": "/"
+}
