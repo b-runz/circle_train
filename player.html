@@ -173,6 +173,43 @@
       text-align: center;
     }
 
+    /* ─── Passphrase input ───────────────────────────────────────────────────── */
+    .passphrase-form { display: flex; flex-direction: column; align-items: center; gap: 16px; width: 100%; max-width: 480px; }
+    .passphrase-form.hidden { display: none; }
+
+    .passphrase-input {
+      width: 100%;
+      background: #1a1a1a;
+      color: var(--text);
+      border: 3px solid var(--border);
+      border-radius: 8px;
+      padding: 14px 20px;
+      font-size: 0.65em;
+      font-family: inherit;
+      text-align: center;
+      letter-spacing: 0.08em;
+      outline: none;
+    }
+    .passphrase-input:focus { border-color: var(--focus); background: #1c1500; }
+    .passphrase-input::placeholder { color: var(--muted); letter-spacing: 0; }
+
+    .unlock-btn {
+      background: #1a3a1a;
+      color: var(--ok);
+      border: 3px solid var(--ok);
+      border-radius: 8px;
+      padding: 14px 40px;
+      font-size: 0.65em;
+      font-family: inherit;
+      cursor: pointer;
+      outline: none;
+    }
+    .unlock-btn:focus, .unlock-btn:hover {
+      border-color: var(--focus);
+      background: rgba(240,180,41,0.1);
+      color: var(--focus);
+    }
+
     /* ─── Bottom bar ──────────────────────────────────────────────────────── */
     .bottom-bar {
       background: var(--surface);
@@ -239,6 +276,11 @@
     <div class="status-icon" id="status-icon">&#128274;</div>
     <div class="status-msg"  id="status-msg">Loading&hellip;</div>
     <div class="status-sub"  id="status-sub"></div>
+    <form class="passphrase-form hidden" id="passphrase-form" onsubmit="submitPassphrase(event)">
+      <input class="passphrase-input" id="passphrase-input"
+             type="password" placeholder="passphrase" autocomplete="off" spellcheck="false" tabindex="5" />
+      <button class="unlock-btn" type="submit" tabindex="6">Unlock &#9654;</button>
+    </form>
   </div>
 </div>
 
@@ -257,11 +299,13 @@ const progFill   = document.getElementById('progress-fill');
 const timeEl     = document.getElementById('time-display');
 const netPill    = document.getElementById('net-pill');
 const cachePill  = document.getElementById('cache-pill');
-const statusScr  = document.getElementById('status-screen');
-const statusIcon = document.getElementById('status-icon');
-const statusMsg  = document.getElementById('status-msg');
-const statusSub  = document.getElementById('status-sub');
-const btnPlay    = document.getElementById('btn-play');
+const statusScr       = document.getElementById('status-screen');
+const statusIcon      = document.getElementById('status-icon');
+const statusMsg       = document.getElementById('status-msg');
+const statusSub       = document.getElementById('status-sub');
+const btnPlay         = document.getElementById('btn-play');
+const passphraseForm  = document.getElementById('passphrase-form');
+const passphraseInput = document.getElementById('passphrase-input');
 
 const CACHE_NAME    = 'cirkel-train-v1';
 const SALT_LEN      = 16;
@@ -270,9 +314,11 @@ const HEADER_LEN    = SALT_LEN + IV_LEN;
 const DECRYPT_CHUNK = 64 * 1024;  // 64 KB streaming window
 
 let hideTimer = null;
+let busy      = false;
 
 // ─── Status screen helpers ────────────────────────────────────────────────────
 function showStatus(icon, msg, sub = '') {
+  passphraseForm.classList.add('hidden');
   statusIcon.textContent = icon;
   statusMsg.textContent  = msg;
   statusMsg.className    = 'status-msg';
@@ -283,11 +329,29 @@ function showStatus(icon, msg, sub = '') {
 }
 
 function showError(msg, sub = '') {
+  passphraseForm.classList.add('hidden');
   statusIcon.textContent = '⚠';
   statusMsg.textContent  = msg;
   statusMsg.className    = 'status-msg error';
   statusSub.textContent  = sub;
   statusScr.classList.remove('hidden');
+}
+
+// ─── Passphrase input ────────────────────────────────────────────────────────
+function showPassphraseInput(retrying = false) {
+  if (retrying) history.replaceState(null, '', location.pathname);
+  showStatus('🔒', retrying ? 'Wrong passphrase — try again' : 'Enter passphrase to unlock');
+  passphraseForm.classList.remove('hidden');
+  passphraseInput.value = '';
+  passphraseInput.focus();
+}
+
+function submitPassphrase(e) {
+  e.preventDefault();
+  const val = passphraseInput.value.trim();
+  if (!val) return;
+  location.hash = encodeURIComponent(val);
+  init();
 }
 
 function hideStatus() {
@@ -396,54 +460,59 @@ async function streamDecryptToCache(passphrase, encResp) {
 
 // ─── Main init ────────────────────────────────────────────────────────────────
 async function init() {
-  await initSW();
-
-  const passphrase = new URLSearchParams(location.search).get('decrypt');
-
-  // 1. Check if decrypted MP4 is already in Cache Storage
-  if ('caches' in window) {
-    try {
-      const cache = await caches.open(CACHE_NAME);
-      const hit   = await cache.match('/udstraek.mp4');
-      if (hit) {
-        cachePill.textContent = 'Cached ✓';
-        cachePill.className   = 'pill pill-info';
-        // Wait for SW to be active so it can intercept the video request
-        if ('serviceWorker' in navigator) await navigator.serviceWorker.ready;
-        vid.src = 'udstraek.mp4';
-        hideStatus();
-        return;
-      }
-    } catch (e) { /* Cache API unavailable */ }
-  }
-
-  cachePill.textContent = 'Not cached';
-  cachePill.className   = 'pill pill-neutral';
-
-  // 2. No cache — need decrypt key
-  if (!passphrase) {
-    showStatus('🔒', 'Video is encrypted', 'Add  ?decrypt=<passphrase>  to the URL to unlock and cache for offline.');
-    return;
-  }
-
-  // 3–5. Stream-fetch → AES-CTR decrypt → Cache Storage, one 64 KB window at a time
-  showStatus('⬇', 'Fetching & decrypting…', '(streaming)');
+  if (busy) return;
+  busy = true;
   try {
-    const resp = await fetch('udstraek.enc');
-    if (!resp.ok) throw new Error('HTTP ' + resp.status);
-    await streamDecryptToCache(passphrase, resp);
-  } catch (e) {
-    showError('Decryption failed — wrong passphrase?', e.message);
-    return;
-  }
-  cachePill.textContent = 'Cached ✓';
-  cachePill.className   = 'pill pill-info';
+    await initSW();
 
-  // 6. Play from Cache Storage via SW — no data stays in page RAM
-  showStatus('⏳', 'Starting player…');
-  if ('serviceWorker' in navigator) await navigator.serviceWorker.ready;
-  vid.src = 'udstraek.mp4';
-  hideStatus();
+    const passphrase = location.hash ? decodeURIComponent(location.hash.slice(1)) : null;
+
+    // 1. Check if decrypted MP4 is already in Cache Storage
+    if ('caches' in window) {
+      try {
+        const cache = await caches.open(CACHE_NAME);
+        const hit   = await cache.match('/udstraek.mp4');
+        if (hit) {
+          cachePill.textContent = 'Cached ✓';
+          cachePill.className   = 'pill pill-info';
+          if ('serviceWorker' in navigator) await navigator.serviceWorker.ready;
+          vid.src = 'udstraek.mp4';
+          hideStatus();
+          return;
+        }
+      } catch (e) { /* Cache API unavailable */ }
+    }
+
+    cachePill.textContent = 'Not cached';
+    cachePill.className   = 'pill pill-neutral';
+
+    // 2. No cache — show passphrase input
+    if (!passphrase) {
+      showPassphraseInput();
+      return;
+    }
+
+    // 3–5. Stream-fetch → AES-CTR decrypt → Cache Storage, one 64 KB window at a time
+    showStatus('⬇', 'Fetching & decrypting…', '(streaming)');
+    try {
+      const resp = await fetch('udstraek.enc');
+      if (!resp.ok) throw new Error('HTTP ' + resp.status);
+      await streamDecryptToCache(passphrase, resp);
+    } catch (e) {
+      showPassphraseInput(true);
+      return;
+    }
+    cachePill.textContent = 'Cached ✓';
+    cachePill.className   = 'pill pill-info';
+
+    // 6. Play from Cache Storage via SW — no data stays in page RAM
+    showStatus('⏳', 'Starting player…');
+    if ('serviceWorker' in navigator) await navigator.serviceWorker.ready;
+    vid.src = 'udstraek.mp4';
+    hideStatus();
+  } finally {
+    busy = false;
+  }
 }
 
 // ─── Video controls ───────────────────────────────────────────────────────────
@@ -502,7 +571,7 @@ document.addEventListener('keydown', e => {
   if (tk === 'back') { e.preventDefault(); history.back(); return; }
 
   switch (e.key) {
-    case 'Enter': if (!isBtn) { e.preventDefault(); togglePlay(); showOverlay(); } break;
+    case 'Enter': if (!isBtn && focused.tagName !== 'INPUT') { e.preventDefault(); togglePlay(); showOverlay(); } break;
     case ' ':     e.preventDefault(); togglePlay(); showOverlay(); break;
     case 'ArrowLeft':
       if (isBtn) moveFocus(-1); else { e.preventDefault(); seek(-10); } break;
